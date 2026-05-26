@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "COSE - 多平台文章同步",
-  "description": "Create Once, Sync Everywhere. 一键将文章同步到多个平台",
+  "name": "Syncblog 同步助手",
+  "description": "Syncblog.cn 配套：一键把 Markdown 文章同步到知乎 / 公众号 / 微博 / 思否 / 掘金 / CSDN 等 30+ 平台草稿。",
   "permissions": [
     "tabGroups",
     "activeTab",
@@ -67,7 +67,7 @@
       "48": "icons/cose_48.png",
       "128": "icons/cose_128.png"
     },
-    "default_title": "COSE",
+    "default_title": "Syncblog 同步助手",
     "default_popup": "popup.html"
   },
   "background": {

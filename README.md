@@ -1,17 +1,36 @@
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/headerDark.svg" />
-    <img src="assets/headerLight.svg" alt="COSE" />
+    <img src="assets/headerLight.svg" alt="Syncblog Publisher (cose fork)" />
   </picture>
 
-_**C**reate **O**nce **S**ync **E**verywhere_
+# Syncblog 同步助手
+
+_**C**reate **O**nce **S**ync **E**verywhere — Syncblog.cn 配套版_
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Chrome Web Store](https://img.shields.io/badge/Install-Chrome%20Web%20Store-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ilhikcdphhpjofhlnbojifbihhfmmhfk)
-[![YouTube](https://img.shields.io/badge/Video-YouTube-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=KTskiA8Xaj4)
-[![Bilibili](https://img.shields.io/badge/Video-Bilibili-00A1D6?logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1ZxqnB1E2C/)
+[![Releases](https://img.shields.io/github/v/release/TUARAN/cose?label=Releases&logo=github)](https://github.com/TUARAN/cose/releases/latest)
+[![Upstream COSE](https://img.shields.io/badge/Upstream-doocs%2Fcose-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ilhikcdphhpjofhlnbojifbihhfmmhfk)
 
 </div>
+
+> [!IMPORTANT]
+> **这是 [doocs/cose](https://github.com/doocs/cose) 的下游 fork**，作为 [syncblog.cn](https://syncblog.cn) 的配套发布扩展维护。
+>
+> 与上游差异：
+> - manifest `name` / `description` / `default_title` 重命名为「Syncblog 同步助手」
+> - `host_permissions` 追加 `syncblog.cn` 与 `localhost:*`，确保站点能注入 `$cose` 桥接
+> - 加了 GitHub Actions release pipeline，打 `v*` tag 自动构建 + 发版
+> - Firefox / Safari 标识符相应改成 `publisher@syncblog.cn` / `cn.syncblog.publisher`
+>
+> 平台同步逻辑（`packages/core`、`packages/detection`）跟随上游主干，定期 rebase。如需更通用的 COSE，请装上游 [Chrome Web Store 版本](https://chromewebstore.google.com/detail/ilhikcdphhpjofhlnbojifbihhfmmhfk)。
+
+## 安装
+
+- **Chrome Web Store**（待上架）
+- **GitHub Releases**：下载 [latest release](https://github.com/TUARAN/cose/releases/latest) 中的 `syncblog-publisher-vX.Y.Z.zip`，解压后到 `chrome://extensions` 开启「开发者模式」→「加载已解压的扩展程序」
+
+## 关于上游 COSE
 
 配合 [doocs/md](https://github.com/doocs/md) Markdown 编辑器使用的浏览器扩展，支持一键将文章同步到多个内容平台。
 

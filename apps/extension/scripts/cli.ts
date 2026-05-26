@@ -148,7 +148,7 @@ const genManifest = async (options: BuildOptions) => {
         // Add Firefox-specific settings
         manifest.browser_specific_settings = {
             gecko: {
-                id: 'cose@doocs.org',
+                id: 'publisher@syncblog.cn',
             },
         }
 
@@ -184,7 +184,7 @@ const buildSafariExtension = async (options: BuildOptions) => {
     }
 
     const safariProjectDir = path.join(rootDir, 'safari-extension')
-    const bundleId = options.bundleId || 'org.doocs.cose'
+    const bundleId = options.bundleId || 'cn.syncblog.publisher'
 
     // Remove existing Safari project
     await fs.rm(safariProjectDir, { recursive: true, force: true })
@@ -197,7 +197,7 @@ const buildSafariExtension = async (options: BuildOptions) => {
             'safari-web-extension-converter',
             path.join(rootDir, 'dist'),
             '--project-location', safariProjectDir,
-            '--app-name', 'COSE',
+            '--app-name', 'Syncblog 同步助手',
             '--bundle-identifier', bundleId,
             '--swift',
             '--no-prompt',
@@ -205,7 +205,7 @@ const buildSafariExtension = async (options: BuildOptions) => {
         ])
         console.log(result.stdout)
         console.log('\n  ✓ Safari extension project created!')
-        console.log(`  ✓ Open in Xcode: open ${safariProjectDir}/COSE/COSE.xcodeproj`)
+        console.log(`  ✓ Open in Xcode: open ${safariProjectDir}/Syncblog/Syncblog.xcodeproj`)
     } catch (error: unknown) {
         const err = error as { stderr?: string; message?: string }
         console.error('Safari conversion failed:', err.stderr || err.message)

@@ -1,7 +1,7 @@
 {
-  "name": "cose-extension",
+  "name": "syncblog-publisher",
   "version": "1.3.5",
-  "description": "Create Once, Sync Everywhere. 一键将文章同步到多个平台",
+  "description": "Syncblog 同步助手：一键把 Markdown 文章同步到知乎/公众号/微博/思否/掘金/CSDN 等 30+ 平台草稿。基于 doocs/cose 改造。",
   "type": "module",
   "scripts": {
     "dev": "mkdir -p /tmp/chrome-debug-profile && web-ext run --source-dir ./dist --target=chromium --chromium-binary \"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --chromium-profile /tmp/chrome-debug-profile --keep-profile-changes",
