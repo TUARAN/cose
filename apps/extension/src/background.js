@@ -380,70 +380,58 @@ chrome.runtime.onStartup.addListener(() => {
   initDynamicRules()
 })
 
-// 当前同步任务的 Tab Group ID
-let currentSyncGroupId = null
 // 存储平台用户信息
 const PLATFORM_USER_INFO = {}
 
-// 获取或创建同步标签组
-async function getOrCreateSyncGroup(windowId) {
-  // 如果已有 group 且仍然有效，直接返回
-  if (currentSyncGroupId !== null) {
-    try {
-      const groups = await chrome.tabGroups.query({ windowId })
-      const existingGroup = groups.find(g => g.id === currentSyncGroupId)
-      if (existingGroup) {
-        return currentSyncGroupId
-      }
-    } catch (e) {
-      // Group 不存在，需要创建新的
-    }
-  }
+// 本批次创建的同步标签页 id（用于结束时一次性分组）
+let syncBatchTabIds = []
 
-  // 创建新的标签组（先创建一个空组是不行的，需要先有 tab）
-  currentSyncGroupId = null
-  return null
+// 收集本批次创建的同步标签页。
+//
+// 关键：这里**只收集 id，不立即分组**。
+// 之前每创建一个标签就马上 chrome.tabs.group()，与后续的 chrome.tabs.create()
+// 交错执行，会让标签栏进入一种 drag-session 状态且不会干净结束，导致此后所有
+// tabs.create / tabs.group 持续抛 "Tabs cannot be edited right now (user may be
+// dragging a tab)."（多平台同步全部失败、"重试全部" 连第一个平台都打不开）。
+// 改为全部创建完后，在 finishSyncBatch() 里一次性分组——此时不会再有 create
+// 跟在后面，即使分组短暂锁住标签栏也无所谓。
+async function addTabToSyncGroup(tabId) {
+  if (tabId != null && !syncBatchTabIds.includes(tabId)) {
+    syncBatchTabIds.push(tabId)
+  }
 }
 
-// 是否把同步标签收进一个标签组（默认关闭）
-// chrome.tabs.group() 会让目标窗口的标签栏进入一种 drag-session 状态，
-// 该状态不会干净地结束，导致此后所有 chrome.tabs.create / tabs.group 持续
-// 抛 "Tabs cannot be edited right now (user may be dragging a tab)."，
-// 表现为多平台同步全部失败、"重试全部" 时连第一个平台都打不开标签页。
-// 老版 Coze 插件不分组所以一直正常。分组只是视觉聚合，关掉它即可恢复。
-const ENABLE_SYNC_TAB_GROUP = false
-
-// 将标签添加到同步组（默认 no-op，见 ENABLE_SYNC_TAB_GROUP 说明）
-async function addTabToSyncGroup(tabId, windowId) {
-  if (!ENABLE_SYNC_TAB_GROUP) return
-  try {
-    if (currentSyncGroupId === null) {
-      // 创建新组
-      currentSyncGroupId = await withTabStripRetry(
-        () => chrome.tabs.group({ tabIds: tabId }),
-        { label: 'tabs.group(new)' },
-      )
-      // 设置组的样式，使用时间戳作为标题
-      const now = new Date()
-      const timestamp = `${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
-      await chrome.tabGroups.update(currentSyncGroupId, {
-        title: `${timestamp}`,
-        color: 'blue',
-        collapsed: false,
-      })
-    } else {
-      // 添加到现有组
-      await withTabStripRetry(
-        () => chrome.tabs.group({ tabIds: tabId, groupId: currentSyncGroupId }),
-        { label: 'tabs.group(add)' },
-      )
+// 批次结束：把本批所有同步标签一次性收进一个标签组（视觉聚合，失败不影响同步）
+async function finishSyncBatch() {
+  if (syncBatchTabIds.length === 0) return
+  // 只对仍然存在的标签分组，避免被用户关掉的标签导致整批失败
+  const aliveIds = []
+  for (const id of syncBatchTabIds) {
+    try {
+      await chrome.tabs.get(id)
+      aliveIds.push(id)
+    } catch (e) {
+      // 标签已不存在，跳过
     }
-  } catch (error) {
-    // 分组只是视觉聚合，失败不应影响同步本身
-    console.error('[COSE] 添加标签到组失败:', error)
   }
-  // 分组会触发标签栏动画，稍作等待让其结算
-  await new Promise(resolve => setTimeout(resolve, 150))
+  syncBatchTabIds = []
+  if (aliveIds.length === 0) return
+
+  try {
+    const groupId = await withTabStripRetry(
+      () => chrome.tabs.group({ tabIds: aliveIds }),
+      { label: 'tabs.group(batch)' },
+    )
+    const now = new Date()
+    const timestamp = `${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+    await chrome.tabGroups.update(groupId, {
+      title: `${timestamp}`,
+      color: 'blue',
+      collapsed: false,
+    })
+  } catch (error) {
+    console.error('[COSE] 同步标签分组失败:', error)
+  }
 }
 
 // 登录检测配置
@@ -502,8 +490,12 @@ async function handleMessage(request, sender) {
       checkAllPlatformsProgressive(request.platforms || PLATFORMS, sender.tab?.id)
       return { started: true, total: (request.platforms || PLATFORMS).length }
     case 'START_SYNC_BATCH':
-      // 开始新的同步批次，重置 tab group
-      currentSyncGroupId = null
+      // 开始新的同步批次，清空待分组的标签 id
+      syncBatchTabIds = []
+      return { success: true }
+    case 'FINISH_SYNC_BATCH':
+      // 结束批次：把本批所有标签一次性收进同一个标签组
+      await finishSyncBatch()
       return { success: true }
     case 'SYNC_TO_PLATFORM':
       return await syncToPlatform(request.platformId, request.content)
