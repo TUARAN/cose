@@ -332,6 +332,14 @@
           if (typeof onProgress === 'function') onProgress({ ...status })
         }
 
+        // 所有平台同步完成后，把本批标签一次性收进同一个标签组
+        // （放在循环外，避免分组与 tabs.create 交错锁住标签栏）
+        try {
+          await sendMessage('FINISH_SYNC_BATCH', {})
+        } catch (e) {
+          console.log('[COSE] 同步标签分组失败:', e.message)
+        }
+
         if (typeof onComplete === 'function') onComplete()
       }
 
