@@ -4,6 +4,36 @@ import { qianfanIntercept } from '@cose/core/src/platforms/qianfan.js'
 import { convertAvatarToBase64 } from '@cose/detection/src/utils.js'
 // [DISABLED] import { fillAlipayOpenContent } from '@cose/core/src/platforms/alipayopen.js'
 
+// ===== 标签栏忙重试 =====
+// Chrome 在标签栏处于动画/拖拽态时会对 tabs.create / tabs.group 等抛出
+// "Tabs cannot be edited right now (user may be dragging a tab)."。
+// 这种状态最常出现在 chrome.tabs.group() 之后、或短时间内连续创建多个后台
+// 标签页时（多平台同步、"重试全部" 时尤其明显）。短暂延迟后重试即可恢复。
+function isTabStripBusyError(error) {
+  const msg = (error && error.message) || String(error || '')
+  return /Tabs cannot be edited right now|user may be dragging a tab/i.test(msg)
+}
+
+async function withTabStripRetry(fn, { retries = 6, delayMs = 350, label = 'tab op' } = {}) {
+  let lastError
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error
+      if (!isTabStripBusyError(error)) throw error
+      console.warn(`[COSE] ${label} 标签栏忙，第 ${attempt + 1}/${retries} 次重试`)
+      await new Promise(resolve => setTimeout(resolve, delayMs * (attempt + 1)))
+    }
+  }
+  throw lastError
+}
+
+// 创建标签页（带标签栏忙重试）
+function createTabSafe(props) {
+  return withTabStripRetry(() => chrome.tabs.create(props), { label: 'tabs.create' })
+}
+
 // ===== Offscreen helper =====
 // Used for login detection in document context (cookies sent automatically)
 
@@ -136,7 +166,7 @@ async function tabContextFetch(siteUrl, apiUrl, options = {}) {
 
     if (!tab) {
       // Create a background tab (not active, for other platforms that need it)
-      const newTab = await chrome.tabs.create({ url: siteUrl, active: false })
+      const newTab = await createTabSafe({ url: siteUrl, active: false })
       tab = newTab
       createdTabId = tab.id
       console.log(`[COSE] tabContextFetch: created background tab ${tab.id}`)
@@ -380,7 +410,10 @@ async function addTabToSyncGroup(tabId, windowId) {
   try {
     if (currentSyncGroupId === null) {
       // 创建新组
-      currentSyncGroupId = await chrome.tabs.group({ tabIds: tabId })
+      currentSyncGroupId = await withTabStripRetry(
+        () => chrome.tabs.group({ tabIds: tabId }),
+        { label: 'tabs.group(new)' },
+      )
       // 设置组的样式，使用时间戳作为标题
       const now = new Date()
       const timestamp = `${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
@@ -391,11 +424,18 @@ async function addTabToSyncGroup(tabId, windowId) {
       })
     } else {
       // 添加到现有组
-      await chrome.tabs.group({ tabIds: tabId, groupId: currentSyncGroupId })
+      await withTabStripRetry(
+        () => chrome.tabs.group({ tabIds: tabId, groupId: currentSyncGroupId }),
+        { label: 'tabs.group(add)' },
+      )
     }
   } catch (error) {
+    // 分组只是视觉聚合，失败不应影响同步本身
     console.error('[COSE] 添加标签到组失败:', error)
   }
+  // 分组会触发标签栏动画，稍作等待让其结算，避免下一次 tabs.create 抛
+  // "Tabs cannot be edited right now"
+  await new Promise(resolve => setTimeout(resolve, 150))
 }
 
 // 登录检测配置
@@ -669,7 +709,7 @@ async function syncToPlatform(platformId, content) {
       console.log(`[COSE] 使用 ${platformId} 平台特定同步处理器`)
       // 创建新标签页（对于微信等需要特殊处理的平台，使用首页）
       const initialUrl = platformId === 'wechat' ? 'https://mp.weixin.qq.com/' : platform.publishUrl
-      tab = await chrome.tabs.create({ url: initialUrl, active: false })
+      tab = await createTabSafe({ url: initialUrl, active: false })
       await addTabToSyncGroup(tab.id, tab.windowId)
 
       // 调用平台特定处理器
@@ -703,7 +743,7 @@ async function syncToPlatform(platformId, content) {
           const targetUrl = `https://xie.infoq.cn/draft/${draftId}`
           console.log('[COSE] InfoQ 创建草稿成功，ID:', draftId)
 
-          tab = await chrome.tabs.create({ url: targetUrl, active: false })
+          tab = await createTabSafe({ url: targetUrl, active: false })
           await addTabToSyncGroup(tab.id, tab.windowId)
           await waitForTab(tab.id)
         } else {
@@ -756,7 +796,7 @@ async function syncToPlatform(platformId, content) {
           const targetUrl = `https://www.jianshu.com/writer#/notebooks/${notebookId}/notes/${noteId}`
           console.log('[COSE] 简书创建文章成功，ID:', noteId)
 
-          tab = await chrome.tabs.create({ url: targetUrl, active: false })
+          tab = await createTabSafe({ url: targetUrl, active: false })
           await addTabToSyncGroup(tab.id, tab.windowId)
           await waitForTab(tab.id)
         } else {
@@ -772,7 +812,7 @@ async function syncToPlatform(platformId, content) {
       console.log('[COSE] 开始处理小红书同步...')
 
       // 打开发布页面
-      tab = await chrome.tabs.create({ url: platform.publishUrl, active: false })
+      tab = await createTabSafe({ url: platform.publishUrl, active: false })
       await addTabToSyncGroup(tab.id, tab.windowId)
       await waitForTab(tab.id)
 
@@ -942,7 +982,7 @@ async function syncToPlatform(platformId, content) {
       const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true })
 
       // 第一步：打开草稿列表页（激活状态，触发编辑器渲染）
-      tab = await chrome.tabs.create({ url: platform.publishUrl, active: true })
+      tab = await createTabSafe({ url: platform.publishUrl, active: true })
       await addTabToSyncGroup(tab.id, tab.windowId)
       await waitForTab(tab.id)
 
@@ -1305,7 +1345,7 @@ async function syncToPlatform(platformId, content) {
       }
 
       // 打开发布页面
-      tab = await chrome.tabs.create({ url: platform.publishUrl, active: false })
+      tab = await createTabSafe({ url: platform.publishUrl, active: false })
       await addTabToSyncGroup(tab.id, tab.windowId)
 
       // 动态注入千帆拦截脚本（MAIN world，尽早执行）
@@ -1443,7 +1483,7 @@ async function syncToPlatform(platformId, content) {
     /* [DISABLED] 支付宝开放平台：使用 ne-engine 富文本编辑器，支持 Markdown 转换
     if (platformId === 'alipayopen') {
       // 先打开发布页面
-      tab = await chrome.tabs.create({ url: platform.publishUrl, active: false })
+      tab = await createTabSafe({ url: platform.publishUrl, active: false })
       await addTabToSyncGroup(tab.id, tab.windowId)
       await waitForTab(tab.id)
 
@@ -1485,7 +1525,7 @@ async function syncToPlatform(platformId, content) {
       }
 
       // 直接打开发布页面
-      tab = await chrome.tabs.create({ url: targetUrl, active: false })
+      tab = await createTabSafe({ url: targetUrl, active: false })
       await addTabToSyncGroup(tab.id, tab.windowId)
       await waitForTab(tab.id)
     }
