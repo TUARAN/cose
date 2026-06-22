@@ -405,8 +405,17 @@ async function getOrCreateSyncGroup(windowId) {
   return null
 }
 
-// 将标签添加到同步组
+// 是否把同步标签收进一个标签组（默认关闭）
+// chrome.tabs.group() 会让目标窗口的标签栏进入一种 drag-session 状态，
+// 该状态不会干净地结束，导致此后所有 chrome.tabs.create / tabs.group 持续
+// 抛 "Tabs cannot be edited right now (user may be dragging a tab)."，
+// 表现为多平台同步全部失败、"重试全部" 时连第一个平台都打不开标签页。
+// 老版 Coze 插件不分组所以一直正常。分组只是视觉聚合，关掉它即可恢复。
+const ENABLE_SYNC_TAB_GROUP = false
+
+// 将标签添加到同步组（默认 no-op，见 ENABLE_SYNC_TAB_GROUP 说明）
 async function addTabToSyncGroup(tabId, windowId) {
+  if (!ENABLE_SYNC_TAB_GROUP) return
   try {
     if (currentSyncGroupId === null) {
       // 创建新组
@@ -433,8 +442,7 @@ async function addTabToSyncGroup(tabId, windowId) {
     // 分组只是视觉聚合，失败不应影响同步本身
     console.error('[COSE] 添加标签到组失败:', error)
   }
-  // 分组会触发标签栏动画，稍作等待让其结算，避免下一次 tabs.create 抛
-  // "Tabs cannot be edited right now"
+  // 分组会触发标签栏动画，稍作等待让其结算
   await new Promise(resolve => setTimeout(resolve, 150))
 }
 
