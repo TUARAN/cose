@@ -34,7 +34,8 @@
           home: platform.url || '',
           checked: false,
           loggedIn: platformResult.loggedIn || false,
-          isChecking: false
+          isChecking: false,
+          supportTypes: supportTypesOf(platform),
         }
         progressiveCallbacks.onProgress(account, completed, total)
       }
@@ -97,6 +98,19 @@
     })
   }
 
+  // 内容类型支持声明：
+  // - article：长文章（全部平台的默认能力，填充各平台文章编辑器）
+  // - booklet / project：以「标题 + 简介 + 链接」组装的链接帖，同样走文章编辑器填充
+  // - opinion：短观点。weibo / juejin / zhihu 有原生信息流发布框处理器；
+  //   xiaohongshu / wechat / baijiahao / douban 编辑器形态适合短图文。
+  //   其余平台是头条文章 / 专栏 / Articles 等纯长文入口，发短内容语义不对
+  const LINK_POST_TYPES = ['article', 'booklet', 'project']
+  const ALL_CONTENT_TYPES = ['opinion', 'article', 'booklet', 'project']
+  // 支持短观点直发的平台（与 @cose/core platforms/index.js 的
+  // OPINION_CAPABLE_PLATFORMS 保持一致；本文件以经典脚本注入页面主世界，
+  // 不能 import，只能持有副本）
+  const OPINION_CAPABLE = new Set(['weibo', 'juejin', 'zhihu', 'xiaohongshu', 'wechat', 'baijiahao', 'douban'])
+
   // 平台配置（与 background.js 保持一致）
   const PLATFORMS = [
     { id: 'csdn', name: 'CSDN', icon: 'https://g.csdnimg.cn/static/logo/favicon32.ico', title: 'CSDN', type: 'csdn', url: 'https://blog.csdn.net/' },
@@ -132,10 +146,15 @@
     { id: 'douban', name: 'Douban', icon: 'https://cdn.simpleicons.org/douban/07C160', title: '豆瓣', type: 'douban', url: 'https://www.douban.com/' },
   ]
 
+  // 平台 → 支持的内容类型
+  function supportTypesOf(platform) {
+    return OPINION_CAPABLE.has(platform.id) ? ALL_CONTENT_TYPES : LINK_POST_TYPES
+  }
+
   // 暴露 $cose 全局对象
   window.$cose = {
     // 版本标识
-    version: '1.0.0',
+    version: '1.1.0',
 
     // 获取支持的平台列表
     getPlatforms() {
@@ -145,6 +164,7 @@
         displayName: p.title,
         home: '',
         checked: false,
+        supportTypes: supportTypesOf(p),
       }))
     },
 
@@ -168,6 +188,7 @@
             home: p.url || '',
             checked: false,
             loggedIn: isLoggedIn,
+            supportTypes: supportTypesOf(p),
           }
         })
 
@@ -190,6 +211,7 @@
           home: p.url || '',
           checked: false,
           loggedIn: false,
+          supportTypes: supportTypesOf(p),
         }))
         if (typeof callback === 'function') {
           callback(accounts)
@@ -217,8 +239,11 @@
     },
 
     // 添加发布任务（兼容 wechatsync 的 addTask 接口）
+    // post.contentType：'opinion' | 'article' | 'booklet' | 'project'，缺省按 article 处理
+    // post.url：booklet / project 等链接帖的原始链接
     addTask(taskData, onProgress, onComplete) {
       const { post, accounts } = taskData
+      const contentType = ALL_CONTENT_TYPES.includes(post?.contentType) ? post.contentType : 'article'
       const selectedAccounts = accounts.filter(a => a.checked)
       const seenPlatformIds = new Set()
       const syncAccounts = []
@@ -267,7 +292,10 @@
         const hasWeibo = syncAccounts.some(a => (a.uid || a.type) === 'weibo')
         const hasXiaohongshu = syncAccounts.some(a => (a.uid || a.type) === 'xiaohongshu')
         let clipboardHtmlContent = null
-        if (hasWechat || hasBaijiahao || hasWangyihao || hasMedium || hasSspai || hasBilibili || hasWeibo || hasXiaohongshu) {
+        // 剪贴板 HTML 只对文章有意义：编辑器页的「复制」按钮会把内联样式的
+        // 渲染结果写入剪贴板。观点 / 小册 / 项目页面没有这个按钮，正文由
+        // post.content 直接给出，跳过这一步（省掉 2s 等待 + 误读剪贴板）。
+        if (contentType === 'article' && (hasWechat || hasBaijiahao || hasWangyihao || hasMedium || hasSspai || hasBilibili || hasWeibo || hasXiaohongshu)) {
           // 先点击复制按钮，将带样式的内容复制到剪贴板
           const copyBtn = document.querySelector('.copy-btn') ||
             document.querySelector('button[class*="copy"]') ||
@@ -306,6 +334,8 @@
             const result = await sendMessage('SYNC_TO_PLATFORM', {
               platformId,
               content: {
+                contentType,
+                url: post.url || '',
                 title: post.title,
                 body: post.content,
                 markdown: post.markdown,

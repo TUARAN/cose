@@ -1,5 +1,5 @@
 // 平台配置
-import { PLATFORMS, LOGIN_CHECK_CONFIG, SYNC_HANDLERS } from '@cose/core/src/platforms/index.js'
+import { PLATFORMS, LOGIN_CHECK_CONFIG, SYNC_HANDLERS, SYNC_HANDLERS_BY_TYPE, OPINION_CAPABLE_PLATFORMS } from '@cose/core/src/platforms/index.js'
 import { qianfanIntercept } from '@cose/core/src/platforms/qianfan.js'
 import { convertAvatarToBase64 } from '@cose/detection/src/utils.js'
 // [DISABLED] import { fillAlipayOpenContent } from '@cose/core/src/platforms/alipayopen.js'
@@ -694,14 +694,55 @@ async function pasteWithDebugger(tabId) {
 }
 
 // 同步到平台
+// 观点 / 文章 / 小册 / 项目统一走各平台文章编辑器填充；
+// booklet / project 若页面没给正文，则由 desc + url 组装成链接帖兜底
+function normalizeContentForType(content) {
+  const contentType = content?.contentType || 'article'
+  if (contentType === 'article' || !content) return content
+
+  if (!content.markdown && !content.body) {
+    const parts = [content.title, content.desc, content.url].filter(Boolean)
+    content.markdown = parts.join('\n\n')
+    content.body = parts.map(p => `<p>${String(p).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`).join('')
+  } else if (!content.body && content.markdown) {
+    content.body = content.markdown
+      .split(/\n{2,}/)
+      .map(p => `<p>${String(p).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`)
+      .join('')
+  }
+  return content
+}
+
 async function syncToPlatform(platformId, content) {
   const platform = PLATFORMS.find(p => p && p.id === platformId)
   if (!platform || !platform.publishUrl) {
     return { success: false, message: '暂不支持该平台' }
   }
 
+  const contentType = content?.contentType || 'article'
+  if (contentType === 'opinion' && !OPINION_CAPABLE_PLATFORMS.has(platformId)) {
+    return { success: false, message: `${platform.title || platformId} 仅支持长文章入口，暂不支持短观点直发` }
+  }
+  content = normalizeContentForType(content)
+
   try {
     let tab
+
+    // 优先：按内容类型路由的处理器（如观点 → 微博发布框 / 掘金沸点 / 知乎想法）
+    const typeHandler = SYNC_HANDLERS_BY_TYPE[contentType]?.[platformId]
+    if (typeHandler) {
+      console.log(`[COSE] 使用 ${platformId} 的 ${contentType} 类型处理器`)
+      tab = await createTabSafe({ url: typeHandler.entryUrl || platform.publishUrl, active: false })
+      await addTabToSyncGroup(tab.id, tab.windowId)
+      await waitForTab(tab.id)
+      const helpers = {
+        chrome,
+        waitForTab,
+        addTabToSyncGroup,
+        PLATFORMS,
+      }
+      return await typeHandler.sync(tab, content, helpers)
+    }
 
     // 检查是否有平台特定的同步处理器
     const syncHandler = SYNC_HANDLERS[platformId]
