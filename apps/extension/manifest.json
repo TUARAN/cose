@@ -34,6 +34,8 @@
     "https://md.doocs.org/*",
     "https://syncblog.cn/*",
     "https://*.syncblog.cn/*",
+    "https://2aran.com/*",
+    "https://*.2aran.com/*",
     "http://localhost/*",
     "http://localhost:*/*",
     "https://*.cnblogs.com/*",
@@ -80,6 +82,8 @@
         "https://md.doocs.org/*",
         "https://syncblog.cn/*",
         "https://*.syncblog.cn/*",
+        "https://2aran.com/*",
+        "https://*.2aran.com/*",
         "http://localhost/*",
         "https://*.huaweicloud.com/*",
         "https://developer.huawei.com/*",
@@ -107,6 +111,8 @@
         "https://md.doocs.org/*",
         "https://syncblog.cn/*",
         "https://*.syncblog.cn/*",
+        "https://2aran.com/*",
+        "https://*.2aran.com/*",
         "http://localhost/*"
       ]
     }

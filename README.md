@@ -20,6 +20,7 @@ _**C**reate **O**nce **S**ync **E**verywhere — Syncblog.cn 配套版_
 > 与上游差异：
 > - manifest `name` / `description` / `default_title` 重命名为「Syncblog 同步助手」
 > - `host_permissions` 追加 `syncblog.cn` 与 `localhost:*`，确保站点能注入 `$cose` 桥接
+> - 允许 `2aran.com/admin/article-distribution` 使用同一桥接协议，首期分发到 X Articles、掘金、小红书、CSDN、知乎和今日头条草稿
 > - 加了 GitHub Actions release pipeline，打 `v*` tag 自动构建 + 发版
 > - Firefox / Safari 标识符相应改成 `publisher@syncblog.cn` / `cn.syncblog.publisher`
 >

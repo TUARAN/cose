@@ -227,7 +227,7 @@ console.log('[COSE Content Script] Hostname:', window.location.hostname)
     // 支付宝等）上本 content script 只负责用户信息缓存——否则任意网页都能
     // 通过 $cose 读取账号登录态、触发发布任务
     const hostname = window.location.hostname
-    const TRUSTED_BRIDGE_HOSTS = ['md.doocs.org', 'syncblog.cn', 'localhost', '127.0.0.1']
+    const TRUSTED_BRIDGE_HOSTS = ['md.doocs.org', 'syncblog.cn', '2aran.com', 'localhost', '127.0.0.1']
     const isTrustedHost = TRUSTED_BRIDGE_HOSTS.some(h => hostname === h || hostname.endsWith('.' + h))
     if (!isTrustedHost) return
 

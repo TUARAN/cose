@@ -1,6 +1,6 @@
 {
   "name": "syncblog-publisher",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "Syncblog 同步助手：一键把 Markdown 文章同步到知乎/公众号/微博/思否/掘金/CSDN 等 30+ 平台草稿。基于 doocs/cose 改造。",
   "type": "module",
   "scripts": {
